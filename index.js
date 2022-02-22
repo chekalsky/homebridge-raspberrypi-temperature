@@ -1,6 +1,7 @@
 var Accessory, Service, Characteristic, UUIDGen;
 
 const fs = require('fs');
+const {spawn} = require('child_process')
 const packageFile = require("./package.json");
 
 module.exports = function(homebridge) {
@@ -32,7 +33,6 @@ function isConfig(configFile, type, name) {
                 return true;
             }
         }
-    } else {
     }
 
     return false;
@@ -61,17 +61,27 @@ function RaspberryPiTemperature(log, config) {
 
 RaspberryPiTemperature.prototype = {
     getServices: function() {
-        var that = this;
+        let that = this;
+        let infoService = new Service.AccessoryInformation();
 
-        var infoService = new Service.AccessoryInformation();
+        const catSerial = spawn('cat', ['/proc/cpuinfo | grep Serial | awk \'{print $3}\''])
+        const catModel = spawn('cat', ['/proc/cpuinfo | grep Model | awk \'{print $3}\''])
+
+        catSerial.on('data', data => {
+            infoService.setCharacteristic(Characteristic.SerialNumber, data)
+        });
+
+        catModel.on('data', data => {
+            infoService.setCharacteristic(Characteristic.Model, data)
+        });
+
         infoService
             .setCharacteristic(Characteristic.Manufacturer, "RaspberryPi")
-            .setCharacteristic(Characteristic.Model, "3B")
-            .setCharacteristic(Characteristic.SerialNumber, "Undefined")
             .setCharacteristic(Characteristic.FirmwareRevision, packageFile.version);
 
         var raspberrypiService = new Service.TemperatureSensor(that.name);
         var currentTemperatureCharacteristic = raspberrypiService.getCharacteristic(Characteristic.CurrentTemperature);
+
         function getCurrentTemperature() {
             var data = fs.readFileSync(that.readFile, "utf-8");
             var temperatureVal = parseFloat(data) / that.multiplier;
